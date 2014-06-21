@@ -1,137 +1,247 @@
-Batch Language Rule Processor
+Batch Language Rule Processor[1]
+May 31, 2014, © Greg Jennings
 
-This is version one of Batch Language Rule Processor.[1]
+This is the Rule Language Specification Version 2.0.
 
-This implements what I call a "Rule Language". Simply put, a "Rule" is a list of one or more "rules". And a "rule" is a PHP function.[2] A basic Rule is, in INI file format, like:
+This is what I call a "Rule Language". Simply put, a "rule" is a function[2] 
+with qualifiers.
 
-	[name]
-	function
+Rule Language Specification 2.0
 
-(A proper case "Rule" is a list of lowercase "rules". Sometimes, due to English language rules, I will use the term "rule function" for "rule".)
+Basic Rule Format
 
-The code includes a simple, web-based test platform only, but other interfaces using the basic algorithm are in process. (The test code is derived from code that is actually used to run a website I developed. So I am calling the test code a "website rules manager/handler".)
+The format of a single rule is:
+
+        [modifier][function|command|label] [arguments]
+
+[function] is any PHP function with the return value stored—the r-value.
+
+[command] is a special command with (usually) the r-value un-affected.
+
+[label] is for jump statement; defined below.
+
+[arguments] are strings with the following interpolations:
+
+        superglobal          within {}
+        $name                $_GET[name] alias
+        $0                   r-value
+
+Other special variables are defined below.
+
+[modifier] is one of the following:
+
+Comments
+
+        ;                    comment
+
+Conditionals
+
+        ?                    execute function if r-value true
+        !                    execute function if r-value false
+        :                    execute function if previous condition failed
+
+Arithmetic Operators
+
+        >                    true if function return value is greater than r-value
+        <                    true if function return value is less than r-value
+
+Tests function return value against r-value and then sets r-value (boolean).
+
+Jump Operators
+
+        .label               define label
+        ?.label              jump to label if r-value true
+        !.label              jump to label if r-value false
+        :.label              jump to label if previous condition failed
+        ..[label]            unconditional jump to label; exit if no label
+
+R-value Operators
+
+        = argument           set r-value to argument
+        +var [argument]      store r-value or argument in var
+        -var                 restore r-value from var (see note)
+        -v var               true if var has been set
+
+Single letter vars will not be used as vars if conflicting with file operators 
+(see below).
+
+File Operators
+
+        -f file              true if file is a file
+        -d file              true if file is a directory
+        -r file              true if file is readable
+        -w file              true if file is writeable
+
+Search and Replace
+
+        /pattern/            search r-value for pattern; sets r-value true or 
+                             false; sets variables (see below)
+        /pattern/text/       search r-value for pattern and replace with text; 
+                             sets r-value to number of replacements; sets 
+                             variables
+
+Modifiers are supported. Currently, forward slash (/) in pattern or text is 
+not supported.
+
+Variables
+
+        $0                   r-value
+        $1                   the first subexpression that matched; $2 the 2nd; 
+                             etc.
+        $_                   holds result of string replace and special 
+                             commands (see below)
+        $]                   version string
+        $[                   PHP version number
+        $,                   print terminator ("<br>")
+        $"                   print array separator (",")
+
+Special commands
+
+        print arguments      print arguments separated by spaces
+        include file         includes PHP file (in function scope)
+
+The r-value not affected.
+
+If r-value is array:
+
+        count                sets number of elements of r-value to $_
+        pop                  pops last value out of r-value and sets it to $_
+        push argument        pushes argument to the end of r-value
+        reverse              reverses r-value
+        shift                shifts first value out of r-value and sets $_
+        sort                 sorts r-value (natural sort)
+        unshift argument     prepends argument to r-value
+
+Next Version Considerations
+
+Conditional Loops
+
+        @while function      while function returns true
+        function [arguments]
+
+        @until function      while function returns false
+        function [arguments]
+
+        @for function        array (simple); sets value in $_ (string)
+        function [arguments]
+
+The Test Code
+
+The code includes a simple, web-based test platform with the rules defined in 
+an INI file. An uppercase "Rule" is a list of lowercase "rules". You can view 
+the test RULES.INI file.
 
 The web interface executes a Rule by URL:
 
-	http://localhost/rules.php?name
+        http://localhost/rules.php?name
 
 With this Rule:
 
-	[phpinfo]
-	phpinfo
+        [phpinfo]
+        phpinfo
 
 this URL:
 
-	http://localhost/rules.php?phpinfo
+        http://localhost/rules.php?phpinfo
 
-Will display the output of phpinfo().
+Will execute phpinfo().
 
-Each rule can have optional "op characters" preceding it to control it's execution -- this will be explained below.
+Basic arguments are stringized; i.e the Rule:
 
-In this implementation, internally the Rule is known as $_GET['rule'], and rules can take arguments.
+        [vars]
+        var_dump a b c
 
-RULE ARGUMENTS
+will result in:
 
-Currently, arguments are stringized; i.e the Rule:
+        string(1) "a" string(1) "b" string(1) "c"
 
-	[vars]
-	var_dump a b c
+Rule function arguments with PHP like variables are compared against GET 
+variables and set to them if they exist, else are set to empty strings. For 
+example:
 
-when executed will result in:
+        [vars]
+        var_dump $a $b $c
 
-	string(1) "a" string(1) "b" string(1) "c"
+with ?vars&a=1&c=foo, will result in:
 
-Rule function arguments with PHP like variables are compared against GET variables and set to them if they exist, else are set to empty strings. For example:
+        string(1) "1" string(0) "" string(3) "foo"
 
-	[vars]
-	var_dump $a $b $c
+Arguments can reference super globals (within {}). This result is the same as 
+above:
 
-with '?vars&a=1&c=foo', will result in:
+        [vars]
+        var_dump {$_GET['a']} {$_GET['b']} {$_GET['c']}
 
-	string(1) "1" string(0) "" string(3) "foo"
+An argument of (double single quotes) is replaced with the PHP value of empty 
+string. Other substitutions are for NULL, TRUE and FALSE.
 
-Arguments can reference super globals (within {}). This result is the same as above:
+More Examples
 
-	[vars]
-	var_dump {$_GET['a']} {$_GET['b']} {$_GET['c']}
+Checking if a value is a integer:
 
-An argument of '' (double single quotes) is replaced with the PHP value of empty string. (A possible addition may be to convert NULL, TRUE and FALSE or any defined value.)
+        [test]
+        is_numeric $a
+        ?print $a is a number
+        :print $a is not a number
 
-RULE CONDITIONALS
+Checking if a number is greater than ten:
 
-Rule functions can be conditional. If a function returns a value it is stored (I call this the "r-value"). A following function can have an indicator to base it's execution on. The conditionals are '!', '?' and ':'. The '!' is for functions that return FALSE (loose), the '?' is for functions that return TRUE and ':' is for an "if else" construct:
+        [gt]
+        = $a
+        >return10
+        ?print > 0
+        :print <= 10
 
-	[test]
-	is_numeric $a
-	?display $a is a number
-	:display $a is not a number
+The odd thing about the arithmetic operators is that they work on the previous 
+value, that is, in the above example, the $a is stored and >return10 sets a 
+boolean: r-value ($a) > 10.
 
-Since echo() and print() are not functions they cannot be used as rules; display() is a defined function that prints all of it's arguments and so does the equivalent.
+The other odd thing is that the arithmetic operators work on the return values 
+of functions (the r-value is not stored). The test code defines return10() to 
+simply return 10.
 
-BASIC ARITHMETIC
+(If a rule function returns NULL, FALSE or empty string it is converted to an 
+integer for > and <.)
 
-A boolean value is stored if the return value for the function is:
+Checking if a value is true (loose):
 
-	>	greater than
-	<	less than
+        [jmp]
+        = $a
+        ?.t
+        print false
+        ..
+        .t
+        print true
 
-This is an example of checking if a number is greater than ten:
+The r-value constructs:
 
-	[gt]
-	abs $a
-	>return10
-	?display > 0
-	:display <= 10
+        [store]
+        = $a
+        +var
+        print rval stored
+        = 11
+        -var
+        print $0
 
-The odd thing about the arithmetic operators is that they work on the previous value, that is, in the above example, the return value of 'abs \$a' is stored and '>return10' sets a boolean: "N (\$a) > M (10)".
+Summary
 
-The other odd thing is that "op chars" only work on the return values of functions, and the test code defines return10() to simply return 10.
+The "rules" algorithm is very simple and the rules language syntax is entirely 
+of my own making (I've never seen anything like it).[3] As the test code shows, 
+it is well suited for a website, and it might be useful for other things.
 
-(If a rule function returns NULL, FALSE or empty string it is converted to an integer for '>' and '<'.)
+The code uses some static data and no globals, and if you've seen it, it ain't 
+a class—but the internal static array for data makes it work not unlike like a 
+class (class tendencies?)
 
-JUMP TO LOCATION
+The odd "modifier character" form is because that makes the code small (and 
+there are a few characters left for possible additional features, but I'd hate 
+to see this go beyond that and have no plans to).
 
-Locations can be jumped to based on results and a label:
+Notes
 
-	?.	TRUE
-	!.	FALSE
-	:.	else
-	..	unconditional
-	.	define label
-
-This is an example of checking if a number is true (loose):
-
-	[jmp]
-	abs $a
-	?.t
-	display FALSE
-	..
-	.t
-	display TRUE
-
-A unconditional jump without a label, '..', is equivalent to exit().
-
-A FEW OTHER THINGS
-
-This Rule introduces the final four constructs: '=' set the "r-value" to it's argument; '+var' stores the "r-value" into a variable 'var'; '-var' sets the "r-value" to the value of variable 'var'; and an argument of '\$0' is replaced by the "r-value".
-
-	[store]
-	= $a
-	+r
-	display rval stored ''
-	-r
-	display $0
-
-SUMMARY
-
-The "rules" algorithm is very simple (basically, two functions of 125 lines total), and the syntax is entirely of my own making (I've never seen anything like it[3]). As the test code shows, it is well suited for a website, and it might be useful for other things.
-
-The code uses some static data and no globals, and if you've seen it, it ain't a class -- but the internal static array for data makes it work not unlike like a class (class tendencies?)
-
-The odd "op character" form is because that makes the code small (and there are a few characters left for possible additional features, but I'd hate to see this go beyond that and have no plans to).
-
-NOTES
 1. BLRP is Be El Are Pee, not "blurp".
-2. A rule function will be a function (procedure) of whatever language the 3. rules algorithm is implemented in.
+2. A rule function will be a function (procedure) of whatever language the 
+rules algorithm is implemented in.
 3. Like a Push-Me-Pull-You.
-4. License: http://creativecommons.org/licenses/by-nc-sa/4.0/
+4. License: http://creativecommons.org/licenses/by-nc-sa/4.0/ 
+
