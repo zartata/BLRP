@@ -102,7 +102,7 @@ function rules_run($rule) {
 
 		// convert any super globals
 		if (preg_match('/{\$[_A-Z]*\[/',$rulestr)) {
-			$rulestr = "\$rulestr = \"$rulestr\";";
+			$rulestr = "\$rulestr = \"$rulestr\";"; //"
 			eval($rulestr);
 			// simply fails if syntax error
 		}
