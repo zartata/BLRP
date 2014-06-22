@@ -1,6 +1,6 @@
 <?php
 
-/* RULES.PHP - Batch Language Rule Processor (BLRP), Spec. Version 1.0.
+/* RULES.PHP - Batch Language Rule Processor (BLRP), Spec. Version 2.0.
 
    The test code makes this a website "rules" manager/handler.
 
@@ -8,7 +8,7 @@
    delimited arguments which will be run for a URL with a rule name.
 
    License: http://creativecommons.org/licenses/by-nc-sa/4.0/
-   rules@gajennings.net
+
 
    NOTE: This code is only 99% tested!
 */
