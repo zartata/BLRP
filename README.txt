@@ -29,12 +29,12 @@ To run it, the PHP test code "calls" the rule by it's URL interface:
 Which simply outputs the string. ('print' here is not the PHP print construct 
 but is a "command" (an alias to a rules.php defined function).
 
-A "function" can be any PHP function A "label" is for a special jump statement 
+A "function" can be any PHP function. A "label" is for a special jump statement 
 defined below.
 
 The optional "arguments" are space separated strings, strings can be within 
-quotes. The first example has two arguments, the second has one, but they will 
-produce the same output:
+quotes. The next two examples, the first has two arguments, the second has one, 
+but they will produce the same output:
 
         function foo bar
         function "foo bar"
@@ -43,7 +43,7 @@ Arguments can have a PHP superglobals as an argument:
 
         print "this rule is {$_GET['rule']}"
 
-A $_GET variable can be by shorthand, with this the same"
+A $_GET variable can be by shorthand, with this the same:
 
         print "this rule is $rule"
 
@@ -70,7 +70,7 @@ Labels mark a position in the rules:
 
         .label               define label
 
-They can be combined with conditional to just to a the label:
+They can be combined with conditionals to jump to a label:
 
         ?.label              jump to label if true
         :.label              jump to label if previous condition failed (else)
@@ -78,7 +78,7 @@ They can be combined with conditional to just to a the label:
         ..[label]            unconditional jump to label; exit if no label
 
 When a function is executed it's return value is stored. This is called the 
-r-value. The operators set, store and restore this value:
+r-value. The operator modifiers set, store and restore this value:
 
         = argument           set r-value to argument
         +var [argument]      store r-value or argument in "var"
@@ -92,7 +92,7 @@ There are shorthand "file operator aliases":
         -r file              same as is_readable file
         -w file              same as is_writeable file
 
-Regular expressions cab be applied to the r-value 
+Regular expressions can be applied to the r-value.
 
 Search and Replace
 
@@ -118,7 +118,7 @@ For string arguments there are several special variables available:
         $,                   print terminator ("<br>")
         $"                   print array separator (",")
 
-Commands are built-in functions. The first two do not effect the r-value:
+Commands are built-in functions. The first three do not effect the r-value:
 
         print arguments      print arguments separated by spaces
         include file         includes PHP file (in function scope)
@@ -158,17 +158,16 @@ of my own making (I've never seen anything like it).[3] As the test code shows,
 it is well suited for a website, and it might be useful for other things.
 
 The code uses some static data and no globals, and if you've seen it, it ain't 
-a class—but the internal static array for data makes it work not unlike like a 
-class (class tendencies?)
+a class -- but the internal static array for data makes it work not unlike like 
+a class (class tendencies?)
 
 The odd "modifier character" form is because that makes the code small (and 
-there are a few characters left for possible additional features, but I'd hate 
-to see this go beyond that and have no plans to).
+there are a few characters left for possible additional features.
 
 Notes
 
 1. BLRP is Be El Are Pee, not "blurp".
 2. A rule function will be a function (procedure) of whatever language the 
-rules algorithm is implemented in.
+rules specification is implemented in.
 3. Like a Push-Me-Pull-You.
 4. License: http://creativecommons.org/licenses/by-nc-sa/4.0/ 
