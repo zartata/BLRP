@@ -19,12 +19,12 @@ The format of a single rule is:
 
 Here is a basic Rule in INI format:
 
-	[hello]
-	print "Hello World"
+        [hello]
+        print "Hello World"
 
 To run it, the PHP test code "calls" the rule by it's URL interface:
 
-	index.php?hello
+        index.php?hello
 
 Which simply outputs the string. ('print' here is not the PHP print construct 
 but is a "command" (an alias to a rules.php defined function).
@@ -33,18 +33,19 @@ A "function" can be any PHP function A "label" is for a special jump statement
 defined below.
 
 The optional "arguments" are space separated strings, strings can be within 
-quotes. The first example has tww argument, the second has one:
+quotes. The first example has two arguments, the second has one, but they will 
+produce the same output:
 
-	function foo bar
-	function "foo bar"
+        function foo bar
+        function "foo bar"
 
 Arguments can have a PHP superglobals as an argument:
 
-	print "this rule is {$_GET['rule']}"
+        print "this rule is {$_GET['rule']}"
 
 A $_GET variable can be by shorthand, with this the same"
 
-	print "this rule is $rule"
+        print "this rule is $rule"
 
 Other special variables are defined below.
 
@@ -76,7 +77,7 @@ They can be combined with conditional to just to a the label:
         !.label              jump to label if false
         ..[label]            unconditional jump to label; exit if no label
 
-When a function is executed it's return valuse is stored. This is called the 
+When a function is executed it's return value is stored. This is called the 
 r-value. The operators set, store and restore this value:
 
         = argument           set r-value to argument
@@ -101,7 +102,7 @@ Search and Replace
                              sets r-value to number of replacements; sets 
                              variables
 
-These are actually full regular exprestions and can be used in other ways.
+These are actually full regular expressions and can be used in other ways.
 Modifiers are supported. Currently, forward slash (/) in pattern or text is 
 not supported.
 
@@ -117,7 +118,7 @@ For string arguments there are several special variables available:
         $,                   print terminator ("<br>")
         $"                   print array separator (",")
 
-Commands are builtin functions. The first two do not effect the r-value:
+Commands are built-in functions. The first two do not effect the r-value:
 
         print arguments      print arguments separated by spaces
         include file         includes PHP file (in function scope)
@@ -125,7 +126,7 @@ Commands are builtin functions. The first two do not effect the r-value:
 
 The others act on r-value as an array:
 
-	range 1 4            set r-value to array (this is the PHP function)
+        range 1 4            set r-value to array (this is the PHP function)
         count                sets number of elements of r-value to $_
         pop                  pops last value out of r-value into $_
         push argument        pushes argument to the end of r-value
@@ -140,7 +141,7 @@ r-value:
         @while               while r-value is true
         function [arguments]
 
-        @until               while r-value is fale
+        @until               while r-value is false
         function [arguments]
 
         @for                 array (simple); sets each value in $_ (string)
@@ -148,7 +149,7 @@ r-value:
 
 A function argument can be execute if within backticks:
 
-	print `exec whoami`
+        print `exec whoami`
 
 SUMMARY
 
@@ -171,4 +172,3 @@ Notes
 rules algorithm is implemented in.
 3. Like a Push-Me-Pull-You.
 4. License: http://creativecommons.org/licenses/by-nc-sa/4.0/ 
-
