@@ -1,6 +1,6 @@
 <?php
 
-/* RULES.PHP - Batch Language Rule Processor (BLRP), Spec. Version 2.0.
+/* RULES.PHP - Batch Language Rule Processor (BLRP), Spec. Version 2.1.
 
    The test code makes this a website "rules" manager/handler.
 
@@ -8,116 +8,51 @@
    delimited arguments which will be run for a URL with a rule name.
 
    License: http://creativecommons.org/licenses/by-nc-sa/4.0/
-
-
-   NOTE: This code is only 99% tested!
 */
 
 define('RULES_FILE','rules');
-define('RULES_VERS','2.0');
-define('RULES_DBG',0);
-
-_rules();			// self initialize
-rules_setup();			// for the testing code
-
-error_reporting(-1);
-
-if (isset($_GET['rule'])) {
-	rules_run($_GET['rule']);
-	print '<br>rules:<br><pre>';
-	foreach (_rules($_GET['rule']) as $r)
-		print "$r<br>";
-}
-else {
-?>
-<!DOCTYPE html>
-<style>dt { float: left; width: 1in; }</style>
-<p>The documentation: <a href="rules.txt">rules.txt</a>. The test rules file: <a href="rules.ini">rules.ini</a>. <a href="https://gist.github.com/AndovaBegarin/2f0e61e6978b5a514f12">Gist</a></p>
-<p>The tests:<br>
-<dl>
-<dt><a href="rules.php?print">?print</a><dd>print version
-<dt><a href="rules.php?phpinfo">?phpinfo</a><dd>phpinfo
-<dt><a href="rules.php?vars&a=a&b=1">?vars</a><dd>var dumps &a &b &c
-<dt><a href="rules.php?test&a=10">?test</a><dd>display whether &a is number
-<dt><a href="rules.php?not&a=a">?not</a><dd>display if &a is not number
-<dt><a href="rules.php?set&a=10">?set</a><dd>displays value of &a
-<dt><a href="rules.php?gt&a=10">?gt</a><dd>tests value of &a > 10
-<dt><a href="rules.php?jmp&a=">?jmp</a><dd>display if &a is true
-<dt><a href="rules.php?store&a=11">?store</a><dd>store and display &a
-<dt><a href="rules.php?files&a=rules.php">?files</a><dd>file operators
-<dt><a href="rules.php?array">?array</a><dd>array commands
-<dt><a href="rules.php?search&a=foobar">?search</a><dd>search &a
-</dl>
-<pre>
-<?php
-}
-
-/* rules_setup - check and verify rule argument */
-
-// this is not part of the rules code per se but the test code; it sets 
-// $_GET['rule'] to the value of the first argument on the URL
-
-function rules_setup() {
-
-	$rules = _rules();
-
-	// if no argument set to default rule if defined else no 'rule' 
-	if (empty($_GET)) {
-		if (isset($rules['default']))
-			$_GET['rule'] = $rules['default'];
-		return;
-	}
-
-# this is a little over kill but it gets the job done; room for more...
-	// set rule to first URL argument; if not defined set to error rule 
-	// if error defined else 'rule' is not defined
-	foreach ($_GET as $get => $na) {
-		unset($_GET[$get]);
-		if (!isset($rules[$get])) {
-			if (isset($rules['error']))
-				$_GET['rule'] = $rules['error'];
-			break;
-		}
-		$_GET['rule'] = $get;
-		break;
-	}
-}
+define('RULES_VERSION','2.1');
+define('RULES_MAX_LOOP',1000);
 
 
 /* rules_run - execute the rules of a rule */
 
 function rules_run($rule) {
 
-	if (!($rules = _rules($rule)))
+	if (!($rules = rules($rule)))
 		return;
 
 # these data live locally here only; two are passed around
 	$rval = $dval = $sval = NULL;
 
 	while (($rulestr = array_shift($rules)) !== NULL) {
-		_rules('_vars','_rval',$rval);
+		rules('_var','_rval',$rval);
 
-		// convert '$var' from $_GET['var'] (if set, else '')
-		$rulestr = rules_getargs($rulestr);
+		// if loop rule, store it, set $rulestr to next rule
+		if (rules_loop($rval,$dval,$rulestr,$rules) === TRUE)
+			continue;
 
-		// convert any super globals
-		if (preg_match('/{\$[_A-Z]*\[/',$rulestr)) {
-			$rulestr = "\$rulestr = \"$rulestr\";"; //"
-			eval($rulestr);
-			// simply fails if syntax error
-		}
+		$args = rule_parse($rulestr);	// turn into arguments
+		$name = array_shift($args);	// shift out function name
 
-		// get function name and any argument(s)
-		$args = explode(' ',$rulestr);
-		$name = array_shift($args);
+		debug($name);
+		debug($args);
+
+		// `command` check (sets $cmd)
+		rules_exec($cmd,$args);
 
 		// interpolate "special" arguments
 		rules_args($rval,$dval,$args);
+
+		// exec `command`
+		if ($cmd)
+			rules_exec($cmd,$args);
 
 		// set r-value
 		if ($name == '=') {
 			if (isset($args[0]))
 				$rval = $args[0];
+			//debug($rval);
 			continue;
 		}
 
@@ -137,6 +72,7 @@ function rules_run($rule) {
 		// conditionals test
 		if (rules_cond($rval,$name,$rules) === TRUE)
 			continue;
+
 # $name does not have any modifier prefix here
 
 		// special commands
@@ -147,62 +83,116 @@ function rules_run($rule) {
 		if (function_exists($name))
 			$rval = call_user_func_array($name,$args);
 
-		if (RULES_DBG) {
-			var_dump($name,$rval);
-			print '<br>';
-		}
+		debug($rval);
 	}
+}
+
+/* rules_loop - execute a rule loop */
+
+// if loop rule set $func to statement; $rulestr to next rule; store loop type
+
+function rules_loop($rval, &$dval, &$rulestr, &$rules) {
+static $loop, $func, $count;
+
+	if ($loop) {
+		if (!is_array($func) && function_exists($func))
+			$dval = $func();
+		else {
+			if (is_array($rval))
+				$dval = array_shift($func);
+			else
+				$dval = $func;
+		}
+		if ($loop == '@while' && !$dval)
+			$loop = FALSE;
+		if ($loop == '@until' && $dval)
+			$loop = FALSE;
+		if ($loop == '@for' && !$dval)
+			$loop = FALSE;
+		if ($loop) {
+			if (++$count < RULES_MAX_LOOP) {
+				array_unshift($rules,$rulestr);	// do again
+				return FALSE;
+			}
+		}
+		$count = 0;
+		return TRUE;
+	}
+	if ($rulestr[0] != '@')
+		return FALSE;
+
+# break in two?????
+
+	$t = explode(' ',$rulestr);
+	if (!isset($t[1]))
+		$func = $rval;
+	else {
+		$func = $t[1];
+		if (!function_exists($func))	// bad rule format
+			return TRUE;		//  ignore the loop rule
+	}
+	$loop = $t[0];
+	return TRUE;
+}
+
+/* rules_exec - execute command, stores result back into $args */
+
+// first call $cmd = NULL, $args = `command [arguments]`
+// second call $cmd = command, $args = [arguments]
+
+function rules_exec(&$cmd, &$args) {
+
+	// if in `` extract command and any arguments
+	if ($args && $args[0][0] == '`') {
+		$arr = explode(' ',$args[0]);
+		$cmd = trim(array_shift($arr),'`');
+		$args = array();
+		foreach ($arr as $a)
+			$args[] = rtrim($a,'`');
+		// now $cmd and $args (array) are stored
+		return;
+	}
+
+	if ($cmd === NULL)
+		return;
+
+	// now we actually exec the $cmd with the interpolated $args
+	if (isset($args[0]))
+		$args[0] = call_user_func_array($cmd,$args);
+	else
+		$args[0] = $cmd();
+
+	$cmd = NULL;
 }
 
 /* rules_args - iterpolate strings as arguments */
 
-// 1) variable lookup
-// 2) variable by function
-// 3) string substitution
-
 function rules_args($rval, $dval, &$args) {
-static $var = array(
-'$,' => '_trm',
-'$"' => '_sep',
+# not much can be done to lessen this complexity
+$s = array('$0','$_','$,','$"','$[','$]',);
+$r = array(
+($rval === NULL) ? '' : $rval,
+($dval === NULL) ? '' : $dval,
+rules('_var','_trm'),
+rules('_var','_sep'),
+phpversion(),
+RULES_VERSION,
 );
-static $fun = array(
-'$[' => 'phpversion',
-);
-static $sub = array(
-'$]' => RULES_VERS,
-"''" => '',
-'TRUE' => TRUE,
-'FALSE' => FALSE,
-'NULL' => NULL,
-);
-	foreach ($args as &$a) {
-		if (isset($sub[$a]))
-			$a = $sub[$a];
-		else
-		if (isset($fun[$a]) && ($f=$fun[$a]))
-			$a = $f();
-		else
-		if (isset($var[$a]))
-			$a = _rules('_vars',$var[$a]);
-		// // subexpressions
-		else
-		if (preg_match('/\$([1-9])/',$a,$r))
-			$a = _rules('_vars','_m'.$r[1]);
-		else
-		// the final two
-		if ($a == '$0')
-			$a = $rval;
-		else
-		if ($a == '$_')
-			$a = $dval;
-	}
+if (is_array($rval)) $r[0] = 'Array';
+foreach (range(1,9) as $n) {
+	$s[] = '$'.$n;
+	$r[] = rules('_var','_m'.$n);
+}
+	if ($args)
+	foreach ($args as &$a)
+		$a = str_replace($s,$r,$a);
 }
 
-/* rules_search - search/replace on r-value */
+/* rules_search - search/replace/regex on r-value */
 
 function rules_search(&$rval, &$dval, $name) {
 
-	if ($name[0] != '/')
+	if (empty($name) || $name[0] != '/')
 		return FALSE;
 
 	if (preg_match('/^(\/[^\/]+\/)([^\/]+)\/(.*)/',$name,$r)) {
@@ -218,7 +208,7 @@ function rules_search(&$rval, &$dval, $name) {
 		$rval = preg_match($r[1],$rval,$rr);
 		array_shift($rr); $i = 1;
 		foreach ($rr as $r)
-			_rules('_vars','_m'.$i++,$r);
+			rules('_var','_m'.$i++,$r);
 	}
 
 	return TRUE;
@@ -226,7 +216,7 @@ function rules_search(&$rval, &$dval, $name) {
 
 /* rules_operater - check rule operator (returns FALSE if not) */
 
-// maps operator to function; function takes argument; argument is required
+// maps "operator" to function; function takes argument; argument is required
 
 function rules_operator(&$rval, $name, $args) {
 static $op = array(
@@ -236,6 +226,8 @@ static $op = array(
 '-w' => 'is_writeable',
 );
 # these are just aliases as the actual functions can be used instead
+# can also uses a special "substitution" array in the INI file to map them 
+# via a simple "if $sub[$name] $name = $sub[$name]" like function
 	if (!isset($op[$name]))
 		return FALSE;
 
@@ -255,7 +247,7 @@ function rules_rval(&$rval, &$dval, &$name, $args) {
 static $vars = array();
 # order dependent; expects other '-' preceded commands (operators) to be 
 # parsed beforehand
-	if (strpos('+-',$name[0]) === FALSE)
+	if (empty($name) || strpos('+-',$name[0]) === FALSE)
 		return FALSE;
 
 	// is var set
@@ -272,10 +264,10 @@ static $vars = array();
 	$name = substr($name,1);
 	switch ($ch) {
 	case '+':
-		_rules('_vars',$name,$rval);
+		rules('_var',$name,$rval);
 		break;
 	case '-':
-		$rval = _rules('_vars',$name);
+		$rval = rules('_var',$name);
 		break;
 	}
 
@@ -287,7 +279,7 @@ static $vars = array();
 function rules_cond(&$rval, &$name, &$rules) {
 static $cond,$aval,$op;
 
-	if (strpos('?:!.><',$name[0]) === FALSE)
+	if (empty($name) || strpos('?:!.><',$name[0]) === FALSE)
 		return FALSE;
 
 	switch ($name[0]) {
@@ -359,8 +351,6 @@ function array_shiftn(&$array, $n) {
 // 1) special commands handled inline
 // 2) special command mapped to function; takes argument; argument optional
 
-# currently let missing argument fail
-
 function rules_command(&$rval, &$dval, &$name, &$args) {
 static $cmd = array(
 'count' => 'count',
@@ -383,7 +373,7 @@ static $cmd = array(
 		include $args[0];
 		return TRUE;
 	case 'version':
-		rules_print('Rules '.RULES_VERS);
+		rules_print('Rules '.RULES_VERSION);
 		return TRUE;		
 	}
 
@@ -409,55 +399,48 @@ static $cmd = array(
 	return FALSE;
 }
 
-/* rules_getargs - replace '$var' in a string with "$_GET['var']" or "''" */
 
-function rules_getargs($_) {
-
-	$re = '/\$([a-z]+)/';
-	if (preg_match_all($re,$_,$res)) {
-		foreach ($res[0] as $k => $v) {
-			$r = (isset($_GET[$res[1][$k]])) ? $_GET[$res[1][$k]] : "''";
-			$_ = str_replace($v,$r,$_);
-		}
-	}
-	return $_;
-}
-
-/* _rules - initialize the rules data; return rules or rule */
+/* rules - initialize the rules data; return rules or rule */
 
 // loads "rules" file which could be in INI file format or a PHP file 
-// directly defining the array (XML to be supported)
+// directly defining the array (JSON, XML to be supported)
 
-function _rules($rule = NULL, $var = NULL, $val = NULL) {
+function rules($rule = NULL, $var = NULL, $val = NULL) {
 static $rules = array();
 
 	if ($rules === array()) {
 // to reduce load time, but then this/that file must be a different name
 //		if (is_file($f=RULES_FILE.'.php'))
 //			include $f;
-//		else
+//		else {
 			$rules = rules_load(RULES_FILE.'.ini');
-		if ($rules == array())
-			return $rules = FALSE;
-		$rules['_vars']['_trm'] = '<br>';
-		$rules['_vars']['_sep'] = ',';
+			if ($rules == array())
+				return $rules = FALSE;
+			if (!isset($rules['_var']['_trm']))
+				$rules['_var']['_trm'] = '<br>';
+			if (!isset($rules['_var']['_sep']))
+				$rules['_var']['_sep'] = ',';
+//		}
 	}
+
+	if ($rules === FALSE)			// not needed if parse error 
+		return FALSE;			//  condition is handled
 
 	if ($rule === NULL)
 		return $rules;
 
 	// meta (internal) data
-	if ($rule == '_vars') {
-		$vars =& $rules['_vars'];
+	if ($rule == '_var') {
+		$vars =& $rules['_var'];
 		if ($var === NULL)
 			return $vars;
 		if ($val !== NULL)
 			return $vars[$var] = $val;
-		return (isset($vars[$var])) ? $vars[$var] : NULL;
+		return (isset($vars[$var])) ? $vars[$var] : '';
 	}
 
 	if (!isset($rules[$rule]))
-		return (isset($rules['default'])) ? $rules[$rules['default']] : NULL;
+		return (isset($rules['default'])) ? $rules[$rules['default']] : '';
 	return $rules[$rule];
 }
 
@@ -467,10 +450,10 @@ static $rules = array();
 function rules_print() {
 	$args = func_get_args();
 	if (is_array($args[0]))
-		print implode(_rules('_vars','_sep'),$args[0]);
+		print implode(rules('_var','_sep'),$args[0]);
 	else
 		print implode(' ',$args);
-	print _rules('_vars','_trm');
+	print rules('_var','_trm');
 }
 
 
@@ -507,18 +490,44 @@ function rules_load($file) {
 	return $data;
 }
 
+/* rule_parse - parse a string into arguments */
+
+function rule_parse($rulestr) {
+static $a = array('/"(.+)"/','/^TRUE$/','/^FALSE$/','/^NULL$/',"/''/",'/""/');
+static $b = array('$1',TRUE,FALSE,NULL,'','');
+
+	$RE = 
+	'/(\/.+\/)|'.			// a regex
+	'([\.\?\-!:<>=\w]+)|'.		// function or command
+	'([\w_\$\{\}\[\]\']+)|'.	// super global
+	'"([^"]*)"|'.			// quoted string
+	'`([^`]+)`|'.			// exec string
+	'([-\d]+)|'.			// number
+	'(\'\')/';			// empty string
+
+	preg_match_all($RE,$rulestr,$res);
+	$args = $res[0];
+	$args = preg_replace($a,$b,$args);
+	$args = preg_replace_callback('/\$([a-z]+)/','_arg',$args);
+	$args = preg_replace_callback('/{\$_[A-Z]+\[\'[A-Za-z_]+\'\]}/','_glob',$args);
+
+	return $args;
+}
+
+function _arg($res) {
+	return $r = (isset($_GET[$res[1]])) ? $_GET[$res[1]] : '';
+}
+
+function _glob($res) {
+	error_reporting(($e=error_reporting()) ^ E_NOTICE);
+	eval("\$r = \"{$res[0]}\";");
+	error_reporting($e);
+	return $r;
+}
+
 
 /* miscellaneous, made up functions for testing */
 
 function return10() {
 	return 10;
-}
-
-
-/* comprehensive and complex debugger! */
-
-function debug($a) {
-if (!RULES_DBG) return;
-	var_dump($a);
-	print '<br>';
 }

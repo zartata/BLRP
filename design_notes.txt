@@ -1,0 +1,78 @@
+BLRP - PHP Implementation Design Notes
+
+The main design goals of the code are simplicity, extensibility and 
+re-usability. By this I mean code that is made up mainly of small algorithms 
+that are easily understood, easy to make changes to and useful for other 
+purposes (in whole or in part).
+
+There are two pieces to this code; the specification, which is known as the 
+Rules Language; the processor, which is the code that implements to the 
+specification.
+
+There are three sections, or areas, of the PHP code:
+
+THE DATA FUNCTION
+
+This manages the list of rules (see RULES.INI). The rules are stored in a 
+static associative array and the function provides an index into the data. 
+Meta data, for special variables, are stored within the rules array in an 
+array member named '_var'.
+
+In addition to the Data Function there is a very simple INI file load 
+function -- a simplified version of parse_ini_file().
+
+THE RULES RUN FUNCTION
+
+This is the external entry point that executes the rule language by running an 
+array of rules.
+
+IMPLEMENTATION SUPPORT FUNCTIONS
+
+The rules execution functionality is split up into functions, run in a 
+particular order, that do most of the work. These functions mirror the basic 
+sections of the specification (as outlined in the file RULES.TXT). They are:
+
+	Argument Interpolation
+	Command Execution
+	Loops
+	Search and Replace (regular expressions)
+	File Operations (aliases)
+	R-Value Operations
+	Conditional/Arithmetic Tests
+	Special Command Handling
+
+Each of these support functions may have their own meta data to match the 
+specification to PHP functionality, and stores rule state data via the rule 
+data function. (Which means support functions have data arrays or static data.)
+
+THE RULES RUN
+
+A Rule is an array of rule strings. The the main loop is while(array_shift()) 
+rather than foreach() so that the rules array can be passed to and modified by 
+the rules sub-routines.
+
+The rules_run() function has a particular design; I do not know of any sort 
+of pattern to define it, but I'll try to explain: The loop manipulates rule 
+strings directly and not through a sub-routine. No sub-routine can parse a 
+rule string on it's own. This is deliberate, but it imposes two limitations:
+
+1) Recursion is not possible -- a rule cannot invoke another set of rules. 
+2) Multiple line loops (or rule sub-routines) are not possible and the loop 
+function (see "Conditional Loops" in README) cannot have arguments as rule 
+functions can.
+
+I do not see these limitations, currently, as flaws. It keeps the code simply a 
+really small API -- nothing like a Class or any having global data is required. 
+
+Also, the sub-routines rules_run() calls do not call any other rules defined 
+sub-routines nor do they have any dependencies on other rules defined 
+sub-routines. Each one is independent from each other, using just the rules() 
+function to -- independently -- access defined data if needed. All the 
+sub-routines are just APIs of their own, at most modifying data that is local 
+to rules_run(), and maintaining their own data statically and separate from 
+the whole.
+
+This architecture is deliberate too. Adding functionality or features to the 
+Rules Language Specification is simply adding another function somewhere in 
+the loop -- each function adhering to an API, each function acting just like 
+a plug-in.
